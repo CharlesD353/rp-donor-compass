@@ -1,0 +1,56 @@
+https://www.harryrlloyd.com/papers/Moral%20uncertainty%20and%20expected%20truthlikeness.pdf - Sections 5, 6, and 7 cover the formal structure
+
+There is an attached similarity score finder example in Python attached to this task.
+
+Have data on how different philosophical worldviews weigh different inputs/outputs from the parliament tool
+Create a similarity score finder using data from (1)
+Calculate pairwise Pearson and rank correlation matrices between worldviews.
+Embed worldviews in 2D similarity space using multi-dimensional scaling.
+Create a 2D coordinate system where:
+    x-axis represents Pearson correlation dimension
+    y-axis represents rank correlation dimension
+    Distance between points indicates dissimilarity
+Calculate weighted centroid (center of mass) in 2D space.
+Find the worldview whose position is closest to the target point.
+Define a function that switches from using this similarity score in (2) to behaving in accordance with the theory you believe the most if that theory is above a defined threshold (below X use the similarity score, above X use most likely theory)
+Set a threshold toggle/button for when to switch out of using the similarity score that starts at 50% and goes all the way up to 100%
+Find if a theory is given weight above or below the threshold in (3)
+If below, use the similarly score finder in (2) to find a theory and obey what that theory recommends
+If above, use the choice by the theory with the most credence and obey what that theory recommends
+
+
+
+Want the ProMet version, since it's what Lloyd endorses:
+
+(ProMET) it is appropriate to follow some moral theory T under conditions of moral uncertainty iff T is the moral theory that is most likely to maximise expected truthlikeness ∑T ′∈T S (T, T ′) cT (T ′)under the decision maker’s credence distribution cS over similarity functions S ∈ S.
+
+As for determining similarity scores across theories, there are many options of how to defined similarity and Lloyd suggests using a my favorite option style approach that would use the similarity score procedure that's suggests a particular approach (this is like my favorite option) and we can use that approach since it’s theoretically more sound.
+
+Below are some options for deciding on similarity, I like (1) the most though think we could loop back to code (2) and (3), time permitting. Basically, what matters about a theory is what it actually suggests you do and how it stacks up various options. Processes are less important. A version of consequentialism and contractualism that say the you should take the same action are in the important sense more similar than two versions of consequentialism (or contractualism) that disagree on what to do: 
+
+Treat rank and pearson correlations of how they score interventions/projects as part of a 2d matrix of similarity. Score similarity of theories based on this and then when choosing actions select the closest to the credence-weighted centroid (this is basically finding a geometric mean that's weighted by how much credence you have in each theory?)
+Theories would score interventions differently based on different risk profiles or empirical beliefs (if the latter changes are allowed). So this likely needs to be based on default inputs we give for these interventions.
+Use both rank and pearson correlations, separately, and weight them 50/50 (or whatever equivalent split) rather than just pick one or use both as in (1) (this would express uncertainty about which similarity ranking is correct).
+Use how closely theories treat the factors of beneficiary/scale/risk, etc. and making a similarity score from that
+Because different theories treat different facts about interventions like animal vs humans, risk, future vs present, and so on differently we could establish a 0 to 1 scale for each, and then use that to derive overall similarity scores from a combination of these factors.
+Using how theories weight different factors might track really closely to the scores theories assign themselves and conceptually could be justified based on thinking of theories as processes, whereas spearman and Pearson correlations treat the important fact of theories as the results. 
+Use some other structural factors about the theories to derive similarity scores
+Using formal structural other than how they treat each of the traits in (3) could be similarly justified by thinking of theories as process-driven.
+Example factors (though we'd need to code a bunch of new stuff for this and these would likely be arguable)
+(1) Teleological structure vs deontological structure
+(2) Teleological verdicts vs deontological verdicts (binary, ordinal, or cardinal in verdicts could be this or something different?)
+(3) Contractualist or not (subset of (1)?)
+(4) virtue ethics or not (subset of (1)?)
+(5) multiple or single sources of value (are there deontological theories that have multiple? Scanlon’s contractualism has a single principle but arguably many sources of value like hedonic being and fairness)
+
+When reporting out about this function we could perhaps note it if something seems really wrong here and we could also manually adjust this.
+
+
+Defining the threshold of when to switch to behaving like My Favorite Theory
+
+For Lloyd, if a theory is above 50%, MET just does whatever that theory suggests (it's the theory closest to what you believe is true).
+
+But we should define this threshold as variable with a toggle/slider/button. While no one has advocated this (though I intend to ask philosophers about it including Lloyd), you could program this so  the compromise approach happens until a much higher percentage (i.e. up to ~100%) so that other theories continue to weigh on your selection in proportion to how much credence you put into them. This would be less theoretically motivated by current papers, but embody the ethos of compromise because of lack of certainty.
+
+FWIW, I actually. think it is plausible that all of your beliefs should inform your actions.
+

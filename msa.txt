@@ -1,0 +1,25 @@
+Example python implementation file attached to this task. Note, this isn't written to comply with our existing structures.
+
+Label all worldviews as binary or cardinal at a structural level (not just within this aggregation method) (get input from Hayley and/or Derek on this before finalizing but can implement it initially like this):
+Binary: Kantianism, Rawlsian Contractarianism
+Cardinal: (all other theories listed presently: Nietzscheanism, Common Sense, Egalitarianism, Risk-Averse Welfarist Consequentialism, Person-Affecting Welfarist Consequentialism, Total Welfarist Consequentialism, Short-termist Utilitarianism, Total Negative Utilitarianism, Total Utilitarianism
+Given(1), within this new aggregation method (example in the attached file):
+Create a new temporary "worldview" by running maximizing expected choiceworthiness (already implemented in the parliament) over the theories labeled as cardinal over the set of selected projects
+Save this temporary worldview
+Set a threshold that each theory has to be over in order to count as "permissible", below which all options are "impermissible" (these could be stored with 0 and 1 for speed)
+This could, in theory, be different for the cardinal bundle and the binary theories (some examples in the attached file)
+We can also set some toggle to select different thresholds here (particularly for the cardinal theory bundle), say,:
+Only the best option is permissible
+Top 2-3 options are permissible
+Intervention needs to be within X% of the score of the best overall intervention in order to be persmissible
+Count up which project/intervention has the highest amount of "permissible", select that theory (if there is a tie, choose randomly)
+Not clear what to do if no intervention is above 50% permissible.
+By default, just stop giving out money (and state how much money was allocated).
+-
+Section 7 - https://philarchive.org/archive/TARVLD#page=28.09
+
+This will require labeling every philosophical worldview in the Parliament tool as ordinal, binary, or cardinal.
+
+MD: I think this will be easiest to just implement binary or cardinal. Then have the existing MEC function run. Not sure how we want to represent the ordinal or binary theories since we currently don't treat, say, Kantianism as merely offering 0 or 1 options (though we could convert anything that is a 0 into impermissible and everything that is higher than that to permissible). Can also consider setting a threshold percentile an intervention has to hit to be permissible.
+
+We do not have average utilitarianism represented (or anything like it), so it should work to just combine all the cardinal theories together.
