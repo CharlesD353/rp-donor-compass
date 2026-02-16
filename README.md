@@ -76,6 +76,7 @@ The app includes:
 - All-method side-by-side comparison
 - Scenario presets (default dataset + two E2E stress scenarios)
 - Editable worldview JSON and optional project-data override
+- CSV exports for EV and EU across all risk models
 
 ## Colab Notebook Demo
 

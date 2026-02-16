@@ -11,7 +11,9 @@ import streamlit as st
 from donor_compass import (
     DEFAULT_PROJECT_DATA,
     EXAMPLE_CUSTOM_WORLDVIEWS,
+    adjust_for_extinction_risk,
     allocate_budget,
+    calculate_all_projects,
     vote_borda,
     vote_credence_weighted_custom,
     vote_lexicographic_maximin,
@@ -383,7 +385,10 @@ def _default_worldview_template(index: int) -> Dict[str, Any]:
     }
 
 
-def render_worldviews_editor(worldviews: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def render_worldviews_editor(
+    worldviews: List[Dict[str, Any]],
+    key_prefix: str = "default",
+) -> List[Dict[str, Any]]:
     control_cols = st.columns([1, 1, 3])
     if control_cols[0].button("Add worldview"):
         worldviews.append(_default_worldview_template(len(worldviews) + 1))
@@ -393,18 +398,24 @@ def render_worldviews_editor(worldviews: List[Dict[str, Any]]) -> List[Dict[str,
     edited_worldviews: List[Dict[str, Any]] = []
     risk_options = list(RISK_PROFILE_LABELS.keys())
 
+    safe_key_prefix = "".join(char if char.isalnum() else "_" for char in key_prefix)
+
     for idx, worldview in enumerate(worldviews):
         name_default = worldview.get("name", f"worldview_{idx}")
         header = f"Worldview {idx + 1}: {name_default}"
         with st.expander(header, expanded=(idx == 0)):
-            name = st.text_input("Name", value=name_default, key=f"wv_{idx}_name")
+            name = st.text_input(
+                "Name",
+                value=name_default,
+                key=f"{safe_key_prefix}_wv_{idx}_name",
+            )
             credence = st.number_input(
                 "Credence",
                 min_value=0.0,
                 value=_safe_float(worldview.get("credence", 0.0), 0.0),
                 step=0.01,
                 help=HELP_CREDENCE,
-                key=f"wv_{idx}_credence",
+                key=f"{safe_key_prefix}_wv_{idx}_credence",
             )
             risk_profile_default = worldview.get("risk_profile", 0)
             risk_profile = st.selectbox(
@@ -415,7 +426,7 @@ def render_worldviews_editor(worldviews: List[Dict[str, Any]]) -> List[Dict[str,
                 else 0,
                 format_func=lambda v: f"{v} ({RISK_PROFILE_LABELS[v]}): {RISK_PROFILE_DESCRIPTIONS[v]}",
                 help=HELP_RISK_PROFILE,
-                key=f"wv_{idx}_risk_profile",
+                key=f"{safe_key_prefix}_wv_{idx}_risk_profile",
             )
             st.caption(
                 "This choice reflects how you want to handle uncertainty in impact estimates. "
@@ -433,7 +444,7 @@ def render_worldviews_editor(worldviews: List[Dict[str, Any]]) -> List[Dict[str,
                 value=_safe_float(worldview.get("p_extinction", 0.0), 0.0),
                 step=0.01,
                 help=HELP_P_EXTINCTION,
-                key=f"wv_{idx}_p_extinction",
+                key=f"{safe_key_prefix}_wv_{idx}_p_extinction",
             )
             theory_type = worldview.get("theory_type", "")
             theory_type_options = ["", "cardinal", "binary"]
@@ -444,7 +455,7 @@ def render_worldviews_editor(worldviews: List[Dict[str, Any]]) -> List[Dict[str,
                 if theory_type in theory_type_options
                 else 0,
                 help=HELP_THEORY_TYPE,
-                key=f"wv_{idx}_theory_type",
+                key=f"{safe_key_prefix}_wv_{idx}_theory_type",
             )
 
             st.markdown("Moral weights")
@@ -457,7 +468,7 @@ def render_worldviews_editor(worldviews: List[Dict[str, Any]]) -> List[Dict[str,
                     value=_safe_float(worldview.get("moral_weights", {}).get(key, 0.0), 0.0),
                     step=0.01,
                     help=HELP_MORAL_WEIGHT,
-                    key=f"wv_{idx}_mw_{key}",
+                    key=f"{safe_key_prefix}_wv_{idx}_mw_{key}",
                 )
 
             st.markdown("Discount factors")
@@ -471,7 +482,7 @@ def render_worldviews_editor(worldviews: List[Dict[str, Any]]) -> List[Dict[str,
                         value=factors_src[i],
                         step=0.01,
                         help=HELP_DISCOUNT_FACTORS,
-                        key=f"wv_{idx}_df_{i}",
+                        key=f"{safe_key_prefix}_wv_{idx}_df_{i}",
                     )
                 )
 
@@ -637,10 +648,87 @@ def build_history_frames(allocation: Dict[str, Any], project_ids: List[str]) -> 
     return iter_df, cumulative_df
 
 
+def _dataframe_to_csv_text(df: pd.DataFrame) -> str:
+    return df.to_csv(index=False)
+
+
+def build_ev_eu_frames(
+    project_data: Dict[str, Any],
+    worldviews: List[Dict[str, Any]],
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if not project_data or not worldviews:
+        return pd.DataFrame(), pd.DataFrame()
+
+    project_ids = list(project_data.keys())
+    raw_credences = [_safe_float(worldview.get("credence", 0.0), 0.0) for worldview in worldviews]
+    total_credence = float(sum(raw_credences))
+    if total_credence > 0:
+        normalized_credences = [credence / total_credence for credence in raw_credences]
+    else:
+        normalized_credences = [0.0 for _ in raw_credences]
+
+    eu_rows: List[Dict[str, Any]] = []
+    ev_rows: List[Dict[str, Any]] = []
+
+    for risk_profile in sorted(RISK_PROFILE_LABELS.keys()):
+        risk_label = RISK_PROFILE_LABELS[risk_profile]
+        worldview_project_scores: List[Dict[str, float]] = []
+
+        for idx, worldview in enumerate(worldviews):
+            moral_weights = worldview.get("moral_weights", {})
+            discount_factors = _normalize_discount_factors(worldview.get("discount_factors"))
+            p_extinction = _safe_float(worldview.get("p_extinction", 0.0), 0.0)
+            worldview_name = worldview.get("name", f"worldview_{idx}")
+
+            base_scores = calculate_all_projects(
+                project_data,
+                moral_weights,
+                discount_factors,
+                risk_profile,
+            )
+            adjusted_scores = adjust_for_extinction_risk(base_scores, project_data, p_extinction)
+            worldview_project_scores.append(adjusted_scores)
+
+            for project_id in project_ids:
+                eu_rows.append(
+                    {
+                        "risk_profile": risk_profile,
+                        "risk_label": risk_label,
+                        "worldview_index": idx,
+                        "worldview": worldview_name,
+                        "credence": float(raw_credences[idx]),
+                        "normalized_credence": float(normalized_credences[idx]),
+                        "project": project_id,
+                        "eu": float(adjusted_scores.get(project_id, 0.0)),
+                    }
+                )
+
+        for project_id in project_ids:
+            ev_value = float(
+                sum(
+                    normalized_credences[idx] * worldview_project_scores[idx].get(project_id, 0.0)
+                    for idx in range(len(worldviews))
+                )
+            )
+            ev_rows.append(
+                {
+                    "risk_profile": risk_profile,
+                    "risk_label": risk_label,
+                    "project": project_id,
+                    "ev": ev_value,
+                }
+            )
+
+    ev_df = pd.DataFrame(ev_rows)
+    eu_df = pd.DataFrame(eu_rows)
+    return ev_df, eu_df
+
+
 def render_single_result(
     method_label: str,
     allocation: Dict[str, Any],
     project_data: Dict[str, Any],
+    worldviews: List[Dict[str, Any]],
 ) -> None:
     funding = allocation["funding"]
     project_ids = list(project_data.keys())
@@ -694,6 +782,42 @@ def render_single_result(
             "share_pct": st.column_config.NumberColumn(format="%.2f%%"),
         },
     )
+
+    ev_df, eu_df = build_ev_eu_frames(project_data, worldviews)
+    if not ev_df.empty and not eu_df.empty:
+        st.subheader("EV / EU Across Risk Models")
+        export_cols = st.columns(2)
+        export_cols[0].download_button(
+            "Download EV CSV (all risk models)",
+            data=_dataframe_to_csv_text(ev_df),
+            file_name="donor_compass_ev_all_risk_models.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        export_cols[1].download_button(
+            "Download EU CSV (all risk models)",
+            data=_dataframe_to_csv_text(eu_df),
+            file_name="donor_compass_eu_all_risk_models.csv",
+            mime="text/csv",
+            use_container_width=True,
+        )
+        st.dataframe(
+            ev_df,
+            use_container_width=True,
+            column_config={
+                "ev": st.column_config.NumberColumn(format="%.4f"),
+            },
+        )
+        with st.expander("EU details by worldview and risk model"):
+            st.dataframe(
+                eu_df,
+                use_container_width=True,
+                column_config={
+                    "eu": st.column_config.NumberColumn(format="%.4f"),
+                    "credence": st.column_config.NumberColumn(format="%.4f"),
+                    "normalized_credence": st.column_config.NumberColumn(format="%.4f"),
+                },
+            )
 
     iter_df, cumulative_df = build_history_frames(allocation, project_ids)
     if not iter_df.empty:
@@ -859,7 +983,7 @@ def app() -> None:
 
     scenarios = build_demo_scenarios()
 
-    st.sidebar.header("1) Setup")
+    st.sidebar.header("Setup")
     view_mode = st.sidebar.radio(
         "View mode",
         ["Single Method Explorer", "All Methods Comparison"],
@@ -988,9 +1112,9 @@ def app() -> None:
                 help="What to do if no project exceeds 50% permissibility.",
             )
 
-    st.sidebar.caption("2) Click Run demo in the main panel.")
+    st.sidebar.caption("Click Run demo in the main panel.")
 
-    st.subheader("2) Inputs")
+    st.subheader("Inputs")
     st.caption(scenario["description"])
     summary_cols = st.columns(4)
     current_projects = st.session_state.get("project_data_data", scenario["data"])
@@ -1006,7 +1130,10 @@ def app() -> None:
 
     editor_tabs = st.tabs(["Worldviews", "Projects"])
     with editor_tabs[0]:
-        worldviews = render_worldviews_editor(st.session_state["worldviews_data"])
+        worldviews = render_worldviews_editor(
+            st.session_state["worldviews_data"],
+            key_prefix=scenario_name,
+        )
     with editor_tabs[1]:
         project_data = render_project_editor(st.session_state["project_data_data"])
 
@@ -1089,6 +1216,7 @@ def app() -> None:
                     "method_description": method_cfg["description"],
                     "allocation": allocation,
                     "project_data": project_data,
+                    "worldviews": worldviews,
                 }
             else:
                 comparison = run_all_methods(
@@ -1110,6 +1238,8 @@ def app() -> None:
                 st.session_state["last_run"] = {
                     "mode": "comparison",
                     "comparison": comparison,
+                    "project_data": project_data,
+                    "worldviews": worldviews,
                 }
         except Exception as exc:  # pragma: no cover - surfaced to user
             st.error(f"Allocation run failed: {exc}")
@@ -1128,6 +1258,7 @@ def app() -> None:
             last_run["method_label"],
             last_run["allocation"],
             last_run["project_data"],
+            last_run.get("worldviews", []),
         )
         return
 
@@ -1137,6 +1268,29 @@ def app() -> None:
 
     st.markdown("---")
     st.subheader("All Methods Comparison")
+
+    ev_df, eu_df = build_ev_eu_frames(
+        last_run.get("project_data", {}),
+        last_run.get("worldviews", []),
+    )
+    if not ev_df.empty and not eu_df.empty:
+        export_cols = st.columns(2)
+        export_cols[0].download_button(
+            "Download EV CSV (all risk models)",
+            data=_dataframe_to_csv_text(ev_df),
+            file_name="donor_compass_ev_all_risk_models.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="comparison_ev_download",
+        )
+        export_cols[1].download_button(
+            "Download EU CSV (all risk models)",
+            data=_dataframe_to_csv_text(eu_df),
+            file_name="donor_compass_eu_all_risk_models.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="comparison_eu_download",
+        )
 
     if successes:
         summary_rows = []
