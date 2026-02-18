@@ -143,6 +143,13 @@ result = allocate_budget(
 | Lexicographic Maximin | `vote_lexicographic_maximin` | `tie_break`, `random_seed` |
 | My Favorite Theory | `vote_my_favorite_theory` | `tie_break`, `random_seed` |
 
+Nash `disagreement_point` options:
+- `zero_spending` (default)
+- `anti_utopia`
+- `random_dictator` (sampled by credence; uses fixed default seed when `random_seed` is omitted)
+- `moral_marketplace`
+- `exclusionary_proportional_split`
+
 See `AGGREGATION_METHODS_README.md` for detailed descriptions, formulas, and fallback behaviour.
 
 ## Calculator Functions
@@ -167,7 +174,7 @@ See `AGGREGATION_METHODS_README.md` for detailed descriptions, formulas, and fal
 
 ## Fallback Behaviour
 
-- **Tie-breaking**: default is `deterministic` (alphabetical project-id). `random` uses `random_seed` when provided.
+- **Tie-breaking**: default is `deterministic` (alphabetical project-id). `random` uses `random_seed`; if omitted, a fixed default seed is used.
 - **MET**: if highest worldview credence >= `met_threshold`, falls back to favorite-theory behaviour.
 - **Nash Bargaining**: if no project has non-negative gains for all worldviews, falls back to maximising sum of gains.
 - **MSA**: if no project exceeds 50% permissibility, either stops allocation (`no_permissible_action="stop"`) or falls back to MEC (`"fallback_mec"`).
@@ -184,6 +191,77 @@ See `AGGREGATION_METHODS_README.md` for detailed descriptions, formulas, and fal
 ```bash
 pytest test_donor_compass.py test_supporting_modules.py test_aggregation_e2e.py -vv
 ```
+
+The tests cover all functional code in the module, including the new aggregation methods:
+
+`TestCalculateSingleEffect` **(5 tests)**
+
+- Uniform values with uniform discounts produce expected sum
+- Moral weight scales results proportionally
+- Zero moral weight produces zero value
+- Different risk profiles select different value columns
+- Discount factors weight each time period correctly
+
+`TestCalculateProject` **(3 tests)**
+
+- Single-effect project returns that effect's value
+- Missing moral weight types default to zero contribution
+- Multi-effect projects sum all effect values
+
+`TestCalculateAllProjects` **(2 tests)**
+
+- Returns values for all projects in the dataset
+- Each project value matches individual `calculate_project` output
+
+`TestAdjustForExtinctionRisk` **(4 tests)**
+
+- xrisk projects remain unchanged regardless of p_extinction
+- Non-xrisk projects scaled by (1 - p_extinction)
+- Zero extinction probability leaves all values unchanged
+- High extinction probability dramatically reduces non-xrisk values
+
+`TestGetDiminishingReturnsFactor` **(4 tests)**
+
+- Zero funding returns the first DR factor
+- Funding in $10M increments maps to correct array indices
+- Funding beyond array length returns the last factor
+- Works correctly with DEFAULT_PROJECT_DATA
+
+`TestVoteCredenceWeightedCustom` **(4 tests)**
+
+- Single worldview allocates entire increment to highest-value project
+- Split credence allocates proportionally
+- Worldviews with same preferences combine allocations
+- High extinction probability shifts preference toward xrisk projects
+
+`TestAllocateBudget` **(4 tests)**
+
+- Total funding equals total budget
+- Number of iterations matches budget / increment_size
+- History records each iteration's allocations
+- Partial final increment handled correctly (budget not divisible by increment)
+
+`TestWithDefaultData` **(4 tests)**
+
+- Smoke test with real project data and moral weights
+- Voting with EXAMPLE_CUSTOM_WORLDVIEWS produces valid allocations
+- Full allocation integration test (100M budget, 10 iterations)
+- `show_allocation` runs without crashing
+
+`TestEdgeCases` **(4 tests)**
+
+- Zero budget results in no allocations
+- Very small increments work correctly
+- Zero credence worldviews allocate nothing
+- Negative effect values (downside scenarios) compute without error
+
+Additional test groups cover:
+
+- Credence validation failures and floating-point DR boundary handling
+- Unified interfaces for `vote_mec` and `vote_my_favorite_theory`
+- Direct unit tests for `met_sim_utils.py`
+- Direct unit tests for `multi_stage_aggregation.py`
+
 
 E2E verbosity:
 - Default (verbose summary): `pytest test_aggregation_e2e.py -vv -s`

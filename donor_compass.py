@@ -288,6 +288,7 @@ AGGREGATION_DEFAULTS = {
     "msa_within_percent": 0.10,
     "msa_binary_threshold": 0.0,
     "tie_break": "deterministic",  # deterministic | random
+    "default_random_seed": 0,  # used when stochastic behavior is requested without random_seed
 }
 
 # Initial default mapping from msa.txt (can be overridden by caller)
@@ -314,6 +315,8 @@ def get_diminishing_returns_factor(data, project_id, current_funding):
 def _build_rng(tie_break, random_seed):
     """Return seeded RNG only when random tie-breaking is requested."""
     if tie_break == "random":
+        if random_seed is None:
+            random_seed = AGGREGATION_DEFAULTS["default_random_seed"]
         return random.Random(random_seed)
     return None
 
@@ -734,6 +737,7 @@ def _nash_disagreement_utilities(
     disagreement_point,
     tie_break="deterministic",
     rng=None,
+    random_seed=None,
 ):
     """Compute per-worldview disagreement utilities for Nash bargaining."""
     n_worldviews = len(worldview_scores)
@@ -743,13 +747,8 @@ def _nash_disagreement_utilities(
         for scores in worldview_scores
     ]
 
-    if disagreement_point == "zero_spending":
-        return [0.0 for _ in range(n_worldviews)]
-
-    if disagreement_point == "anti_utopia":
-        return [min(scores[p] for p in projects) for scores in worldview_scores]
-
-    if disagreement_point == "random_dictator":
+    def _expected_best_project_mix_utilities():
+        """Expected utilities under a credence-weighted mix of each worldview's top project."""
         utilities = []
         for i in range(n_worldviews):
             baseline = 0.0
@@ -757,6 +756,26 @@ def _nash_disagreement_utilities(
                 baseline += credences[j] * worldview_scores[i][best_projects[j]]
             utilities.append(baseline)
         return utilities
+
+    if disagreement_point == "zero_spending":
+        return [0.0 for _ in range(n_worldviews)]
+
+    if disagreement_point == "anti_utopia":
+        return [min(scores[p] for p in projects) for scores in worldview_scores]
+
+    if disagreement_point == "random_dictator":
+        total_credence = float(sum(credences))
+        if total_credence <= 0:
+            return [0.0 for _ in range(n_worldviews)]
+        if random_seed is None:
+            random_seed = AGGREGATION_DEFAULTS["default_random_seed"]
+        sampling_rng = random.Random(random_seed)
+        dictator_idx = sampling_rng.choices(range(n_worldviews), weights=credences, k=1)[0]
+        dictator_project = best_projects[dictator_idx]
+        return [worldview_scores[i][dictator_project] for i in range(n_worldviews)]
+
+    if disagreement_point == "moral_marketplace":
+        return _expected_best_project_mix_utilities()
 
     if disagreement_point == "exclusionary_proportional_split":
         utilities = []
@@ -776,7 +795,8 @@ def _nash_disagreement_utilities(
 
     raise ValueError(
         "Unknown disagreement_point. Use one of: "
-        "zero_spending, anti_utopia, random_dictator, exclusionary_proportional_split."
+        "zero_spending, anti_utopia, random_dictator, "
+        "moral_marketplace, exclusionary_proportional_split."
     )
 
 
@@ -815,6 +835,7 @@ def vote_nash_bargaining(
         disagreement_point,
         tie_break=tie_break,
         rng=rng,
+        random_seed=random_seed,
     )
 
     feasible_scores = {}

@@ -1043,7 +1043,10 @@ def app() -> None:
         random_seed_raw = st.text_input(
             "Random seed (optional integer)",
             value="",
-            help="Used only when tie break is random.",
+            help=(
+                "Used for random tie-breaks and Nash random_dictator sampling. "
+                "If left blank, the app uses a fixed default seed."
+            ),
         )
         return_debug = st.checkbox(
             "Collect per-iteration debug metadata",
@@ -1070,6 +1073,7 @@ def app() -> None:
                     "zero_spending",
                     "anti_utopia",
                     "random_dictator",
+                    "moral_marketplace",
                     "exclusionary_proportional_split",
                 ],
                 help="Baseline utilities used for Nash bargaining gains.",

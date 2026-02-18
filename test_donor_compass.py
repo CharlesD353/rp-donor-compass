@@ -40,6 +40,9 @@ from donor_compass import (
 )
 
 
+NASH_TEST_RANDOM_DICTATOR_SEED = 13
+
+
 # =============================================================================
 # Test Fixtures
 # =============================================================================
@@ -879,6 +882,7 @@ class TestVoteNashBargaining:
             10,
             worldviews,
             disagreement_point="random_dictator",
+            random_seed=NASH_TEST_RANDOM_DICTATOR_SEED,
             return_debug=True,
         )
 
@@ -911,6 +915,34 @@ class TestVoteNashBargaining:
             disagreement_point="zero_spending",
             tie_break="random",
             random_seed=11,
+            return_debug=True,
+        )
+
+        assert allocations_1 == allocations_2
+
+    def test_random_tie_breaking_without_seed_is_reproducible(self, tri_project_data):
+        funding = {p: 0 for p in tri_project_data}
+        worldviews = [
+            _make_worldview("Human-focused", 0.5, human=1.0),
+            _make_worldview("Chicken-focused", 0.5, chickens=1.0),
+        ]
+
+        allocations_1, _ = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="zero_spending",
+            tie_break="random",
+            return_debug=True,
+        )
+        allocations_2, _ = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="zero_spending",
+            tie_break="random",
             return_debug=True,
         )
 
@@ -1127,6 +1159,94 @@ class TestVoteNashBargainingExtended:
         assert dbg_anti["disagreement_point"] == "anti_utopia"
         assert dbg_excl["disagreement_point"] == "exclusionary_proportional_split"
 
+    def test_supports_moral_marketplace(self, tri_project_data):
+        funding = {p: 0 for p in tri_project_data}
+        worldviews = [
+            _make_worldview("Human-focused", 0.55, human=1.0),
+            _make_worldview("Chicken-focused", 0.45, chickens=1.0),
+        ]
+
+        alloc_market, dbg_market = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="moral_marketplace",
+            return_debug=True,
+        )
+        alloc_random, dbg_random = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="random_dictator",
+            random_seed=NASH_TEST_RANDOM_DICTATOR_SEED,
+            return_debug=True,
+        )
+
+        assert sum(alloc_market.values()) == 10
+        assert sum(alloc_random.values()) == 10
+        assert dbg_market["disagreement_point"] == "moral_marketplace"
+        assert dbg_market["disagreement_utilities"] != pytest.approx(
+            dbg_random["disagreement_utilities"]
+        )
+
+    def test_random_dictator_is_reproducible_with_seed(self, tri_project_data):
+        funding = {p: 0 for p in tri_project_data}
+        worldviews = [
+            _make_worldview("Human-focused", 0.55, human=1.0),
+            _make_worldview("Chicken-focused", 0.45, chickens=1.0),
+        ]
+
+        alloc_1, dbg_1 = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="random_dictator",
+            random_seed=NASH_TEST_RANDOM_DICTATOR_SEED,
+            return_debug=True,
+        )
+        alloc_2, dbg_2 = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="random_dictator",
+            random_seed=NASH_TEST_RANDOM_DICTATOR_SEED,
+            return_debug=True,
+        )
+
+        assert alloc_1 == alloc_2
+        assert dbg_1["disagreement_utilities"] == pytest.approx(dbg_2["disagreement_utilities"])
+
+    def test_random_dictator_without_seed_is_reproducible(self, tri_project_data):
+        funding = {p: 0 for p in tri_project_data}
+        worldviews = [
+            _make_worldview("Human-focused", 0.55, human=1.0),
+            _make_worldview("Chicken-focused", 0.45, chickens=1.0),
+        ]
+
+        alloc_1, dbg_1 = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="random_dictator",
+            return_debug=True,
+        )
+        alloc_2, dbg_2 = vote_nash_bargaining(
+            tri_project_data,
+            funding,
+            10,
+            worldviews,
+            disagreement_point="random_dictator",
+            return_debug=True,
+        )
+
+        assert alloc_1 == alloc_2
+        assert dbg_1["disagreement_utilities"] == pytest.approx(dbg_2["disagreement_utilities"])
+
     def test_invalid_disagreement_point_raises(self, tri_project_data):
         funding = {p: 0 for p in tri_project_data}
         worldviews = [_make_worldview("Human-focused", 1.0, human=1.0)]
@@ -1141,7 +1261,7 @@ class TestVoteNashBargainingExtended:
 
     def test_fallback_objective_path_is_used_when_no_feasible_project(self, two_project_data):
         funding = {p: 0 for p in two_project_data}
-        # Opposing preferences + random dictator baseline -> no project has non-negative gains for everyone
+        # Opposing preferences + moral marketplace baseline -> no project has non-negative gains for everyone
         worldviews = [
             _make_worldview("AlphaOnly", 0.5, human=1.0),
             _make_worldview("BetaOnly", 0.5, chickens=1.0),
@@ -1151,7 +1271,7 @@ class TestVoteNashBargainingExtended:
             funding,
             10,
             worldviews,
-            disagreement_point="random_dictator",
+            disagreement_point="moral_marketplace",
             return_debug=True,
         )
         assert debug["objective"] == "sum_gains_fallback"

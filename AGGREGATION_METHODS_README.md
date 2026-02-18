@@ -142,7 +142,8 @@ How it works:
 2. Compute disagreement utilities using selected disagreement point:
    - `zero_spending` (default)
    - `anti_utopia`
-   - `random_dictator`
+   - `random_dictator` (sample one worldview by credence; use its top project as the disagreement act; fixed default seed when `random_seed` omitted)
+   - `moral_marketplace` (budget-by-credence baseline)
    - `exclusionary_proportional_split`
 3. For each project, compute gains over disagreement utilities.
 4. If all gains are non-negative for all worldviews, maximize Nash product.
@@ -239,7 +240,7 @@ Use when:
 
 Tie-break:
 - `tie_break="deterministic"` (default): alphabetical by project id.
-- `tie_break="random"` with optional `random_seed` for reproducibility.
+- `tie_break="random"` uses `random_seed`; if omitted, a fixed default seed is used.
 
 Debug:
 - Most methods support `return_debug=True` and return `(allocations, metadata)`.
